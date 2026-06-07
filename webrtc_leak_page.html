@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Netzwerk-Diagnose</title>
+<style>
+body{background:#1a1a2e;color:#e94560;font-family:'Courier New',monospace;margin:0;padding:20px;min-height:100vh}
+.container{max-width:700px;margin:40px auto;background:#16213e;border-radius:12px;padding:30px;box-shadow:0 0 40px rgba(233,69,96,0.2)}
+h2{border-bottom:2px solid #e94560;padding-bottom:10px}.result{background:#0f3460;padding:12px;margin:8px 0;border-radius:6px;word-break:break-all}
+.ip-box{background:#0f3460;border:2px solid #e94560;padding:15px;margin:10px 0;border-radius:8px;font-size:1.2em;text-align:center}
+.warn{color:#f39c12}.critical{color:#e94560;font-weight:bold}.ok{color:#27ae60}
+.leak{background:#2c0a0a;border:2px solid #e94560;animation:pulse 2s infinite}@keyframes pulse{0%{box-shadow:0 0 10px #e94560}50%{box-shadow:0 0 30px #e94560}100%{box-shadow:0 0 10px #e94560}}
+</style></head><body><div class="container">
+<h2>🌐 Netzwerk-Diagnose-Tool</h2><p>IP-Leak-Test l&#228;uft...</p><div id="results"></div>
+</div><script>
+(async()=>{
+let out=document.getElementById('results');let ips=[];
+function addResult(title,data,cls=''){
+let d='<div class="result'+(cls?' '+cls:'')+'"><strong>'+title+':</strong><br>'+data+'</div>';out.innerHTML+=d;}
+try{
+let r=await fetch('https://api.ipify.org?format=json');let j=await r.json();
+addResult('&#127760; &#214;ffentliche IP (HTTP)','<div class="ip-box">'+j.ip+'</div>');ips.push(j.ip);
+}catch(e){addResult('&#127760; HTTP IP','Fetch fehlgeschlagen','warn');}
+try{
+let r=await fetch('https://api64.ipify.org?format=json');let j=await r.json();
+addResult('&#127760; IPv6/IPv4 Fallback','<div class="ip-box">'+j.ip+'</div>');ips.push(j.ip);
+}catch(e){}
+try{
+let iframe=document.createElement('iframe');iframe.style.display='none';iframe.src='https://wtfismyip.com/json';
+document.body.appendChild(iframe);
+iframe.onload=()=>{try{let d=JSON.parse(iframe.contentDocument.body.innerText);
+addResult('&#128274; Iframe-Cross IP','<div class="ip-box">'+d.YourFuckingIPAddress+'</div>');ips.push(d.YourFuckingIPAddress);}catch(e){}};
+}catch(e){}
+let rtcIps=[];
+try{
+let pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'},{urls:'stun:stun2.l.google.com:19302'}]});
+pc.createDataChannel('');let offer=await pc.createOffer();await pc.setLocalDescription(offer);
+pc.onicecandidate=(e)=>{if(e.candidate){
+let c=e.candidate.candidate;let ms=c.match(/([0-9]{1,3}\.){3}[0-9]{1,3}|([a-f0-9:]+:+)+[a-f0-9]+/gi);
+if(ms){ms.forEach(m=>{if(!rtcIps.includes(m))rtcIps.push(m);});}}};
+await new Promise(r=>setTimeout(r,5000));pc.close();
+if(rtcIps.length>0){
+rtcIps.forEach(ip=>{
+let isLocal=ip.startsWith('192.168.')||ip.startsWith('10.')||ip.startsWith('172.16.')||ip==='0.0.0.0';
+addResult('&#128248; WebRTC Leak (!) '+(isLocal?'(Lokal)':''),
+'<div class="ip-box'+(isLocal?'':' leak')+'">'+ip+'</div>',isLocal?'':'critical');
+ips.push(ip);});
+}else{addResult('&#128248; WebRTC','Keine IPs gefunden (Browser gesch&#252;tzt)','ok');}
+}catch(e){addResult('&#128248; WebRTC','WebRTC blockiert/fehlgeschlagen','warn');}
+let deduped=[...new Set(ips)];addResult('&#128203; Zusammenfassung','<div class="ip-box">'+deduped.join('<br>')+'</div><br><small>'+deduped.length+' eindeutige IP(s) gefunden.</small>');
+if(deduped.length>1){addResult('&#9888;&#65039; VPN LEKTAGE!','<div class="critical ip-box leak">VERSCHIEDENE IPs ERKANNT!<br>Deine VPN leakt deine echte IP via WebRTC oder DNS!</div>','critical');}
+})();</script></body></html>
